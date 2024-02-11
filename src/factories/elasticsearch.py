@@ -6,26 +6,23 @@ from elasticsearch import __version__ as elastic_version
 
 
 def elasticsearch(
-    process_fixture_name: str,
     scope: str = "module",
+    host: Optional[str] = "localhost",
+    port: Optional[int] = 9200,
     username: Optional[str] = None,
     password: Optional[str] = None,
+    cleanup_pattern: Optional[str] = None,
 ) -> Callable[[pytest.FixtureRequest], Iterator[Elasticsearch]]:
     """Create Elasticsearch client fixture.
     :param process_fixture_name: elasticsearch process fixture name
     """
 
     @pytest.fixture(scope=scope)
-    def elasticsearch_fixture(
-        request: pytest.FixtureRequest,
-    ) -> Iterator[Elasticsearch]:
+    def elasticsearch_fixture() -> Iterator[Elasticsearch]:
         """Elasticsearch client fixture."""
-        process = request.getfixturevalue(process_fixture_name)
-        if not process.running():
-            process.start()
         client_def = {
-            "host": process.host,
-            "port": process.port,
+            "host": host,
+            "port": port,
             "scheme": "http",
         }
         if username and password:
@@ -40,7 +37,14 @@ def elasticsearch(
             client.options(ignore_status=400)
 
         yield client
-        for index in client.indices.get_alias("*test*"):
-            client.indices.delete(index=index)
+        if cleanup_pattern is not None:
+            for index in client.indices.get_alias(cleanup_pattern):
+                client.indices.delete(index=index)
 
     return elasticsearch_fixture
+
+
+def create_records(es_client: Elasticsearch, index: str, records: list[dict]) -> None:
+    """Create records in Elasticsearch."""
+    for record in records:
+        es_client.index(index=index, body=record)
